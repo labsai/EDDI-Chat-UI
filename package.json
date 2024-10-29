@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "dependencies": {
-    "@types/node": "^20.12.12",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.2",
     "@types/react-dom": "^18.3.0",
     "katex": "^0.16.10",
