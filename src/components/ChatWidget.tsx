@@ -364,6 +364,9 @@ export function ChatWidget() {
       dispatch({ type: "SET_QUICK_REPLIES", replies: [] });
       dispatch({ type: "SET_PROCESSING", value: true });
       dispatch({ type: "SET_THINKING", value: true });
+      // Start each turn from a clean escalation state, regardless of how the
+      // previous turn ended.
+      dispatch({ type: "SET_ESCALATING", value: false });
 
       try {
         if (isDemo) {
@@ -465,6 +468,7 @@ export function ChatWidget() {
         console.error("Failed to send message:", err);
         dispatch({ type: "SET_PROCESSING", value: false });
         dispatch({ type: "SET_THINKING", value: false });
+        dispatch({ type: "SET_ESCALATING", value: false });
       }
     },
     [
