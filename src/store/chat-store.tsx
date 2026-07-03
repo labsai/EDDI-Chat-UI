@@ -21,6 +21,8 @@ export interface ChatState {
   quickReplies: QuickReply[];
   isProcessing: boolean;
   isThinking: boolean;
+  /** True while a model cascade is escalating to a more capable model. */
+  isEscalating: boolean;
   undoAvailable: boolean;
   redoAvailable: boolean;
   agentName: string | null;
@@ -56,6 +58,7 @@ export const initialState: ChatState = {
   quickReplies: [],
   isProcessing: false,
   isThinking: false,
+  isEscalating: false,
   undoAvailable: false,
   redoAvailable: false,
   agentName: null,
@@ -75,6 +78,7 @@ export type ChatAction =
   | { type: "SET_QUICK_REPLIES"; replies: QuickReply[] }
   | { type: "SET_PROCESSING"; value: boolean }
   | { type: "SET_THINKING"; value: boolean }
+  | { type: "SET_ESCALATING"; value: boolean }
   | { type: "SET_UNDO_REDO"; undoAvailable: boolean; redoAvailable: boolean }
   | { type: "REPLACE_MESSAGES"; messages: ChatMessage[] }
   | { type: "SET_AGENT_NAME"; name: string | null }
@@ -112,7 +116,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       if (last?.role === "agent") {
         msgs[msgs.length - 1] = { ...last, isStreaming: false };
       }
-      return { ...state, messages: msgs, isProcessing: false, isThinking: false };
+      return { ...state, messages: msgs, isProcessing: false, isThinking: false, isEscalating: false };
     }
 
     case "SET_QUICK_REPLIES":
@@ -124,6 +128,9 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_THINKING":
       return { ...state, isThinking: action.value };
 
+    case "SET_ESCALATING":
+      return { ...state, isEscalating: action.value };
+
     case "CLEAR_MESSAGES":
       return {
         ...state,
@@ -132,6 +139,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         quickReplies: [],
         conversationState: null,
         isThinking: false,
+        isEscalating: false,
         undoAvailable: false,
         redoAvailable: false,
         activeInputField: null,

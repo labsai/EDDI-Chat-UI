@@ -42,6 +42,8 @@ export type SSEEventType =
   | "task_start"
   | "task_complete"
   | "thinking"
+  | "cascade_step_start"
+  | "cascade_escalation"
   | "done"
   | "error";
 

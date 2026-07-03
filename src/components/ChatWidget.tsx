@@ -12,7 +12,7 @@ import { MessageBubble } from "./MessageBubble";
 import { ChatInput } from "./ChatInput";
 import { SecretInput } from "./SecretInput";
 import { QuickReplies } from "./QuickReplies";
-import { TypingIndicator, ThinkingIndicator } from "./Indicators";
+import { TypingIndicator, ThinkingIndicator, EscalatingIndicator } from "./Indicators";
 import { ScrollToBottom } from "./ScrollToBottom";
 import { ChatHeader } from "./ChatHeader";
 
@@ -139,6 +139,8 @@ export function ChatWidget() {
       switch (event.type) {
         case "token":
           dispatch({ type: "SET_THINKING", value: false });
+          // Tokens are flowing — any cascade escalation is over.
+          dispatch({ type: "SET_ESCALATING", value: false });
           dispatch({ type: "APPEND_TO_LAST_AGENT", token: event.data });
           return false;
         case "thinking":
@@ -179,6 +181,18 @@ export function ChatWidget() {
           });
           dispatch({ type: "FINISH_STREAMING" });
           return true;
+        case "cascade_step_start":
+          // A cascade step is starting — keep the thinking indicator visible
+          // while buffered steps run (only a live final step streams tokens).
+          dispatch({ type: "SET_THINKING", value: true });
+          return false;
+        case "cascade_escalation":
+          // The cascade escalated to a more capable model. Show a generic
+          // "thinking harder" hint — never expose model names, confidence,
+          // or cost to end users.
+          dispatch({ type: "SET_ESCALATING", value: true });
+          dispatch({ type: "SET_THINKING", value: true });
+          return false;
         // task_start / task_complete — pipeline progress, ignore for now
         default:
           return false;
@@ -637,8 +651,14 @@ export function ChatWidget() {
               <MessageBubble key={msg.id} message={msg} />
             ))}
 
-            {state.isThinking && <ThinkingIndicator />}
-            {state.isProcessing && !state.isThinking && <TypingIndicator />}
+            {state.isEscalating ? (
+              <EscalatingIndicator />
+            ) : state.isThinking ? (
+              <ThinkingIndicator />
+            ) : null}
+            {state.isProcessing && !state.isThinking && !state.isEscalating && (
+              <TypingIndicator />
+            )}
 
             <div ref={messagesEndRef} />
           </>
