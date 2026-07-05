@@ -429,11 +429,180 @@ a:hover { opacity: 0.85; }
 
 .chat-input {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  flex-direction: column;
   padding: 12px 16px 16px;
   border-top: 1px solid var(--chat-border);
   background: var(--chat-surface);
+}
+
+.chat-input__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* ─── Pending attachment chips ────────────────── */
+
+.chat-input__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.chat-attachment {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  padding: 6px 26px 6px 6px;
+  background: var(--chat-input-bg);
+  border: 1px solid var(--chat-input-border);
+  border-radius: 10px;
+  font-size: 0.78rem;
+}
+
+.chat-attachment--error {
+  border-color: #e5484d;
+}
+
+.chat-attachment__thumb {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.chat-attachment__icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chat-surface-raised);
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.chat-attachment__meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-attachment__name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chat-input-text);
+  font-weight: 500;
+}
+
+.chat-attachment__sub {
+  color: var(--chat-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-attachment--error .chat-attachment__sub {
+  color: #e5484d;
+}
+
+.chat-attachment__sub--warn {
+  color: #d9820b;
+}
+
+.chat-attachment__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--chat-text-muted);
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.chat-attachment__remove:hover {
+  background: var(--chat-surface-raised);
+  color: var(--chat-text);
+}
+
+.chat-attachment__spinner {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: var(--chat-text-muted);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* ─── Attachments on a sent message bubble ────── */
+
+.message__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.message__attachment {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.message__attachment-warn {
+  font-size: 0.7rem;
+  color: #ffd7a3;
+  opacity: 0.95;
+}
+
+.message__attachment-img {
+  max-width: 220px;
+  max-height: 200px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.message__attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.message__attachment-file-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.message__attachment-file-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
 }
 
 .chat-input__textarea {
@@ -999,6 +1168,9 @@ a:hover { opacity: 0.85; }
 
   .chat-input {
     padding: 8px 8px 12px;
+  }
+
+  .chat-input__row {
     gap: 8px;
   }
 

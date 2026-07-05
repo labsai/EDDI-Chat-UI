@@ -49,4 +49,54 @@ describe("MessageBubble", () => {
     const link = screen.getByRole("link", { name: "EDDI" });
     expect(link).toHaveAttribute("href", "https://eddi.labs.ai");
   });
+
+  it("renders an image thumbnail for an image attachment", () => {
+    renderBubble({
+      id: "8",
+      role: "user",
+      content: "",
+      timestamp: 0,
+      attachments: [{ fileName: "pic.png", mimeType: "image/png", previewUrl: "blob:x" }],
+    });
+    const img = screen.getByRole("img", { name: "pic.png" });
+    expect(img).toHaveAttribute("src", "blob:x");
+  });
+
+  it("renders a file chip (name + size) for a non-image attachment", () => {
+    renderBubble({
+      id: "9",
+      role: "user",
+      content: "see this",
+      timestamp: 0,
+      attachments: [{ fileName: "report.pdf", mimeType: "application/pdf", sizeBytes: 2048 }],
+    });
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+    expect(screen.getByText("see this")).toBeInTheDocument();
+  });
+
+  it("shows a 'not sent to model' indicator when forwardableInline is false", () => {
+    renderBubble({
+      id: "10",
+      role: "user",
+      content: "",
+      timestamp: 0,
+      attachments: [{ fileName: "huge.png", mimeType: "image/png", previewUrl: "blob:x", forwardableInline: false }],
+    });
+    expect(screen.getByTestId("attachment-not-forwarded")).toBeInTheDocument();
+  });
+
+  it("escapes a malicious filename instead of rendering it as HTML", () => {
+    const evil = '<img src=x onerror=alert(1)>.pdf';
+    const { container } = renderBubble({
+      id: "11",
+      role: "user",
+      content: "",
+      timestamp: 0,
+      attachments: [{ fileName: evil, mimeType: "application/pdf", sizeBytes: 1 }],
+    });
+    // The filename is rendered as text, and no injected <img> element exists.
+    expect(screen.getByText(evil)).toBeInTheDocument();
+    expect(container.querySelector("img[onerror]")).toBeNull();
+  });
 });

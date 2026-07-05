@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { chatReducer, initialState, type ChatState, type ChatAction } from "./chat-store";
 import type { ChatMessage } from "@/types";
 
@@ -116,6 +116,71 @@ describe("chatReducer", () => {
     const result = chatReducer(state, { type: "REPLACE_MESSAGES", messages: newMsgs });
     expect(result.messages).toHaveLength(2);
     expect(result.messages[0].content).toBe("new1");
+  });
+
+  describe("attachment preview cleanup", () => {
+    const origRevoke = URL.revokeObjectURL;
+    let revoked: string[];
+    beforeEach(() => {
+      revoked = [];
+      URL.revokeObjectURL = (url: string) => {
+        revoked.push(url);
+      };
+    });
+    afterEach(() => {
+      URL.revokeObjectURL = origRevoke;
+    });
+
+    const imgMsg = (previewUrl: string, content = ""): ChatMessage =>
+      makeMsg({
+        role: "user",
+        content,
+        attachments: [{ fileName: "p.png", mimeType: "image/png", previewUrl }],
+      });
+
+    it("CLEAR_MESSAGES revokes blob: preview URLs", () => {
+      const state: ChatState = {
+        ...initialState,
+        messages: [imgMsg("blob:X"), makeMsg({ role: "agent", content: "hi" })],
+      };
+      chatReducer(state, { type: "CLEAR_MESSAGES" });
+      expect(revoked).toContain("blob:X");
+    });
+
+    it("CLEAR_MESSAGES ignores non-blob preview URLs", () => {
+      const state: ChatState = {
+        ...initialState,
+        messages: [imgMsg("https://example.com/p.png")],
+      };
+      chatReducer(state, { type: "CLEAR_MESSAGES" });
+      expect(revoked).toHaveLength(0);
+    });
+
+    it("REPLACE_MESSAGES preserves an earlier user image and does NOT revoke its blob", () => {
+      // Undo of a LATER turn rebuilds turn 1 (user image) + its agent reply from
+      // a snapshot that carries no attachments.
+      const state: ChatState = {
+        ...initialState,
+        messages: [imgMsg("blob:keep", "turn1"), makeMsg({ role: "agent", content: "a1" })],
+      };
+      const rebuilt = [
+        makeMsg({ role: "user", content: "turn1" }),
+        makeMsg({ role: "agent", content: "a1" }),
+      ];
+      const result = chatReducer(state, { type: "REPLACE_MESSAGES", messages: rebuilt });
+      expect(result.messages[0].attachments?.[0].previewUrl).toBe("blob:keep");
+      expect(revoked).not.toContain("blob:keep");
+    });
+
+    it("REPLACE_MESSAGES revokes a blob no surviving message references", () => {
+      const state: ChatState = {
+        ...initialState,
+        messages: [imgMsg("blob:gone", "turn1"), makeMsg({ role: "agent", content: "a1" })],
+      };
+      const rebuilt = [makeMsg({ role: "agent", content: "only-agent" })];
+      chatReducer(state, { type: "REPLACE_MESSAGES", messages: rebuilt });
+      expect(revoked).toContain("blob:gone");
+    });
   });
 
   it("SET_CONFIG merges config", () => {

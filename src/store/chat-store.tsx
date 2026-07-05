@@ -90,6 +90,42 @@ export type ChatAction =
 
 /* ─── Reducer ─────────────────────────────────── */
 
+/** Free object URLs held by message attachment previews before messages are dropped. */
+function revokeMessagePreviews(messages: ChatMessage[]): void {
+  for (const message of messages) {
+    message.attachments?.forEach((a) => {
+      if (a.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(a.previewUrl);
+    });
+  }
+}
+
+/**
+ * Carry client-only attachment previews from the previous messages onto rebuilt
+ * ones, matched by user-message order. Snapshots (from undo/redo) never carry
+ * attachments, so without this an earlier image message loses its thumbnail when
+ * a later turn is undone.
+ */
+function preserveAttachments(prev: ChatMessage[], next: ChatMessage[]): ChatMessage[] {
+  const prevUserAttachments = prev.filter((m) => m.role === "user").map((m) => m.attachments);
+  let i = 0;
+  return next.map((m) => {
+    if (m.role !== "user") return m;
+    const att = prevUserAttachments[i++];
+    return att && att.length ? { ...m, attachments: att } : m;
+  });
+}
+
+/** Revoke only the preview URLs present in `prev` that no message in `next` still references. */
+function revokeOrphanedPreviews(prev: ChatMessage[], next: ChatMessage[]): void {
+  const kept = new Set<string>();
+  next.forEach((m) => m.attachments?.forEach((a) => a.previewUrl && kept.add(a.previewUrl)));
+  prev.forEach((m) =>
+    m.attachments?.forEach((a) => {
+      if (a.previewUrl?.startsWith("blob:") && !kept.has(a.previewUrl)) URL.revokeObjectURL(a.previewUrl);
+    }),
+  );
+}
+
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "SET_CONVERSATION_ID":
@@ -132,6 +168,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, isEscalating: action.value };
 
     case "CLEAR_MESSAGES":
+      revokeMessagePreviews(state.messages);
       return {
         ...state,
         messages: [],
@@ -149,8 +186,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case "SET_UNDO_REDO":
       return { ...state, undoAvailable: action.undoAvailable, redoAvailable: action.redoAvailable };
 
-    case "REPLACE_MESSAGES":
-      return { ...state, messages: action.messages };
+    case "REPLACE_MESSAGES": {
+      // Undo/redo rebuild messages from a snapshot (no attachments). Carry the
+      // client-side previews forward so thumbnails survive, and revoke only the
+      // previews that are genuinely gone.
+      const merged = preserveAttachments(state.messages, action.messages);
+      revokeOrphanedPreviews(state.messages, merged);
+      return { ...state, messages: merged };
+    }
 
     case "SET_AGENT_NAME":
       return { ...state, agentName: action.name };

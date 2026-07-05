@@ -2,6 +2,17 @@
    EDDI Chat — Shared Types
    ────────────────────────────────────────────── */
 
+/** A file attached to a user message, shown as a chip/thumbnail on the bubble. */
+export interface MessageAttachment {
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number;
+  /** Object URL for an inline image preview. */
+  previewUrl?: string;
+  /** `false` when the file was too large to forward inline to the model. */
+  forwardableInline?: boolean;
+}
+
 /** A single chat message (user or agent). */
 export interface ChatMessage {
   id: string;
@@ -10,6 +21,8 @@ export interface ChatMessage {
   timestamp: number;
   /** True while the agent is still streaming tokens. */
   isStreaming?: boolean;
+  /** Attachments the user sent alongside this message. */
+  attachments?: MessageAttachment[];
 }
 
 /** A quick-reply button returned by the backend. */

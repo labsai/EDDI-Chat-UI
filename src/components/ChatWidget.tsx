@@ -26,6 +26,9 @@ import {
   redoConversation,
   fetchAgentDescriptor,
   setBaseUrl,
+  buildAttachmentContext,
+  type ChatContext,
+  type SentAttachment,
 } from "@/api/chat-api";
 import {
   isDemoMode,
@@ -347,18 +350,32 @@ export function ChatWidget() {
 
   /* ─── Send message ──────────────────────────── */
   const handleSend = useCallback(
-    async (text: string, isSecret?: boolean) => {
-      // Build context for secret input
-      const secretContext = isSecret
-        ? { secretInput: { type: "string" as const, value: "true" } }
-        : undefined;
+    async (text: string, isSecret?: boolean, attachments?: SentAttachment[]) => {
+      // Build the turn context: secret-input flag + attachment_* keys.
+      const context: ChatContext = {};
+      if (isSecret) {
+        context.secretInput = { type: "string", value: "true" };
+      }
+      if (attachments?.length) {
+        Object.assign(context, buildAttachmentContext(attachments));
+      }
+      const turnContext = Object.keys(context).length > 0 ? context : undefined;
 
-      // Add user message (display masked if secret)
+      // Add user message (display masked if secret), carrying attachment chips.
       const userMsg: ChatMessage = {
         id: `user-${Date.now()}-${Math.random()}`,
         role: "user",
         content: isSecret ? "●●●●●●●●" : text,
         timestamp: Date.now(),
+        attachments: attachments?.length
+          ? attachments.map((a) => ({
+              fileName: a.fileName,
+              mimeType: a.mimeType,
+              sizeBytes: a.sizeBytes,
+              previewUrl: a.previewUrl,
+              forwardableInline: a.forwardableInline,
+            }))
+          : undefined,
       };
       dispatch({ type: "ADD_MESSAGE", message: userMsg });
       dispatch({ type: "SET_QUICK_REPLIES", replies: [] });
@@ -394,8 +411,8 @@ export function ChatWidget() {
           const qrs = demoGetQuickReplies(text);
           dispatch({ type: "SET_QUICK_REPLIES", replies: qrs });
         } else if (isManagedAgent && intent && userId) {
-          // Managed agent (non-streaming only)
-          const snapshot = await sendManagedAgentMessage(intent, userId, text);
+          // Managed agent (non-streaming only) — forward attachment/secret context too.
+          const snapshot = await sendManagedAgentMessage(intent, userId, text, turnContext);
           dispatch({ type: "SET_THINKING", value: false });
           processSnapshot(snapshot);
           dispatch({ type: "SET_PROCESSING", value: false });
@@ -428,7 +445,7 @@ export function ChatWidget() {
             agentId,
             state.conversationId,
             text,
-            secretContext,
+            turnContext,
             abort.signal,
           );
 
@@ -458,7 +475,7 @@ export function ChatWidget() {
             state.conversationId,
             text,
             userId,
-            secretContext,
+            turnContext,
           );
           dispatch({ type: "SET_THINKING", value: false });
           processSnapshot(snapshot);

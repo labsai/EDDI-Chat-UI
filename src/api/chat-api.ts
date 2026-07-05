@@ -10,6 +10,13 @@ import type {
   SSEEventType,
 } from "@/types";
 
+/**
+ * A conversation context entry. `value` is a string for simple flags
+ * (e.g. `secretInput`) or an object for structured entries such as
+ * `attachment_*` keys (`{ storageRef, fileName }`).
+ */
+export type ChatContext = Record<string, { type: string; value: unknown }>;
+
 let _baseUrl = "";
 
 /** Set the API base URL (e.g. from ChatConfig). Call once at startup. */
@@ -91,7 +98,7 @@ export async function sendMessage(
   conversationId: string,
   message: string,
   userId?: string,
-  context?: Record<string, { type: string; value: string }>,
+  context?: ChatContext,
 ): Promise<ConversationSnapshot> {
   const params = new URLSearchParams({
     returnDetailed: "false",
@@ -128,7 +135,7 @@ export async function* sendMessageStreaming(
   _agentId: string,
   conversationId: string,
   message: string,
-  context?: Record<string, { type: string; value: string }>,
+  context?: ChatContext,
   signal?: AbortSignal,
 ): AsyncGenerator<SSEEvent> {
   const body: Record<string, unknown> = { input: message };
@@ -203,6 +210,7 @@ export async function sendManagedAgentMessage(
   intent: string,
   userId: string,
   message?: string,
+  context?: ChatContext,
 ): Promise<ConversationSnapshot> {
   const params = new URLSearchParams({
     returnDetailed: "false",
@@ -212,11 +220,16 @@ export async function sendManagedAgentMessage(
     `/agents/managed/${encodeSegment(intent)}/${encodeSegment(userId)}?${params}`,
   );
 
-  if (message) {
+  // A defined message (even "") means "send a turn" → POST with body + context;
+  // an omitted message means "load the conversation" → GET. Using truthiness here
+  // would misroute an attachment-only turn (empty text) to the context-less GET.
+  if (message != null) {
+    const body: Record<string, unknown> = { input: message };
+    if (context && Object.keys(context).length > 0) body.context = context;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: message }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`Failed to send message: ${res.statusText}`);
     return res.json();
@@ -300,21 +313,121 @@ export async function fetchAgentDescriptor(
 
 /* ─── Attachments ────────────────────────────── */
 
+/**
+ * Largest file the backend accepts on upload
+ * (`eddi.attachments.max-size-bytes`, default 20 MiB). Validated client-side.
+ */
+export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Largest file the backend inlines into an LLM message
+ * (`eddi.attachments.max-forward-bytes`, default 10 MiB). Larger files are
+ * stored and downloadable but not "seen" inline (`forwardableInline: false`).
+ */
+export const MAX_FORWARD_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Backend per-turn cap on forwarded attachments
+ * (`AttachmentContextExtractor.DEFAULT_MAX_ATTACHMENTS_PER_TURN`).
+ */
+export const MAX_ATTACHMENTS_PER_TURN = 5;
+
+/** Response body of a successful upload (`201`). */
 export interface AttachmentResult {
   storageRef: string;
   fileName: string;
   mimeType: string;
   sizeBytes: number;
+  conversationId?: string;
+  /** `false` when the file is too large to forward inline to the model. */
+  forwardableInline?: boolean;
+}
+
+/** Attachment metadata from the list endpoint (backend uses lowercase `filename`). */
+export interface AttachmentMeta {
+  storageRef: string;
+  filename?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  conversationId?: string;
+}
+
+/** An uploaded attachment being sent with a turn (context ref + display preview). */
+export interface SentAttachment {
+  storageRef: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes?: number;
+  forwardableInline?: boolean;
+  /** Object URL for an inline image preview on the sent bubble. */
+  previewUrl?: string;
+}
+
+/** Error carrying the HTTP status and backend error code. */
+export class AttachmentError extends Error {
+  status: number;
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "AttachmentError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** True for MIME types that can be shown as an inline image preview. */
+export function isImageMime(mimeType?: string | null): boolean {
+  return !!mimeType && mimeType.startsWith("image/");
+}
+
+/** Human-readable byte size, e.g. `1.4 MB`. */
+export function formatBytes(bytes?: number): string {
+  if (bytes == null || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+}
+
+function normalizeFileName(raw: { fileName?: string; filename?: string }): string {
+  return raw.fileName ?? raw.filename ?? "";
+}
+
+async function toAttachmentError(res: Response): Promise<AttachmentError> {
+  let message = res.statusText || "Request failed";
+  let code: string | undefined;
+  try {
+    const body = await res.json();
+    message = body.error ?? body.message ?? message;
+    code = body.code;
+  } catch {
+    // Non-JSON error body — keep the status text.
+  }
+  return new AttachmentError(message, res.status, code);
 }
 
 /**
  * Upload a file attachment to a conversation.
- * POST /conversations/{conversationId}/attachments (multipart/form-data)
+ * POST /conversations/{conversationId}/attachments (multipart/form-data).
+ * Rejects oversized files client-side; surfaces backend error codes.
  */
 export async function uploadAttachment(
   conversationId: string,
   file: File,
 ): Promise<AttachmentResult> {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new AttachmentError(
+      `File too large: ${formatBytes(file.size)} (max ${formatBytes(MAX_ATTACHMENT_BYTES)})`,
+      400,
+      "ATTACHMENT_TOO_LARGE",
+    );
+  }
+
   const formData = new FormData();
   formData.append("file", file);
 
@@ -323,6 +436,75 @@ export async function uploadAttachment(
     { method: "POST", body: formData },
   );
 
-  if (!res.ok) throw new Error(`Attachment upload failed: ${res.statusText}`);
+  if (!res.ok) throw await toAttachmentError(res);
+
+  const result = (await res.json()) as AttachmentResult & { filename?: string };
+  return { ...result, fileName: normalizeFileName(result) };
+}
+
+/** List attachment metadata owned by a conversation. */
+export async function listAttachments(
+  conversationId: string,
+): Promise<AttachmentMeta[]> {
+  const res = await fetch(
+    buildUrl(`/conversations/${encodeSegment(conversationId)}/attachments`),
+  );
+  if (!res.ok) throw await toAttachmentError(res);
   return res.json();
+}
+
+/** Build the download URL for one attachment. */
+export function getAttachmentDownloadUrl(
+  conversationId: string,
+  storageRef: string,
+): string {
+  return buildUrl(
+    `/conversations/${encodeSegment(conversationId)}/attachments/${encodeSegment(storageRef)}`,
+  );
+}
+
+/** Delete a single attachment. */
+export async function deleteAttachment(
+  conversationId: string,
+  storageRef: string,
+): Promise<void> {
+  const res = await fetch(getAttachmentDownloadUrl(conversationId, storageRef), {
+    method: "DELETE",
+  });
+  if (!res.ok) throw await toAttachmentError(res);
+}
+
+/** Delete every attachment for a conversation (GDPR erasure). Returns the count. */
+export async function deleteAllAttachments(
+  conversationId: string,
+): Promise<number> {
+  const res = await fetch(
+    buildUrl(`/conversations/${encodeSegment(conversationId)}/attachments`),
+    { method: "DELETE" },
+  );
+  if (!res.ok) throw await toAttachmentError(res);
+  try {
+    const body = await res.json();
+    return typeof body?.deletedCount === "number" ? body.deletedCount : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Build the `attachment_*` context map that forwards uploaded attachments to the
+ * LLM on the next turn. Caps at {@link MAX_ATTACHMENTS_PER_TURN}. Sending only
+ * `{ storageRef, fileName }` lets the backend resolve the trusted MIME / size.
+ */
+export function buildAttachmentContext(attachments: SentAttachment[]): ChatContext {
+  const context: ChatContext = {};
+  attachments.slice(0, MAX_ATTACHMENTS_PER_TURN).forEach((att, index) => {
+    context[`attachment_${index}`] = {
+      type: "object",
+      value: att.fileName
+        ? { storageRef: att.storageRef, fileName: att.fileName }
+        : { storageRef: att.storageRef },
+    };
+  });
+  return context;
 }
