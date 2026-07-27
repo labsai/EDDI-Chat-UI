@@ -6,7 +6,7 @@
    ────────────────────────────────────────────── */
 
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { fetchAgents, type AgentSummary } from "@/api/chat-api";
 import { ChatHeader } from "@/components/ChatHeader";
@@ -16,7 +16,10 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; agents: AgentSummary[] };
 
-export function AgentPicker({ environment = "production" }: { environment?: string }) {
+export function AgentPicker() {
+  // "/chat/test" must keep the visitor in the test environment; only the
+  // catch-all route, which has no environment segment at all, falls back.
+  const { environment = "production" } = useParams();
   const [state, setState] = useState<LoadState>({ status: "loading" });
 
   useEffect(() => {

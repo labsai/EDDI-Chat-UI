@@ -115,6 +115,17 @@ describe("AgentPicker", () => {
     });
   });
 
+  it("keeps the environment from the URL when building agent links", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      Response.json([descriptor("agent-1", "Support Bot")]),
+    ) as typeof fetch;
+
+    renderPicker("/chat/test");
+
+    const link = await screen.findByText("Support Bot");
+    expect(link.closest("a")?.getAttribute("href")).toBe("/chat/test/agent-1");
+  });
+
   it("handles an unknown path the same way", async () => {
     globalThis.fetch = vi.fn(async () =>
       Response.json([descriptor("agent-1", "Support Bot")]),

@@ -343,6 +343,10 @@ export interface AgentSummary {
 /**
  * List the agents this EDDI instance knows about, for the no-agent-selected landing.
  * Descriptors carry the display name; the id is parsed out of the resource URI.
+ * Soft-deleted agents are already filtered out by the store.
+ *
+ * Capped at 100 — this is a convenience landing for a URL that named no agent, not an
+ * agent browser. An instance with more than that wants search, not a longer list.
  */
 export async function fetchAgents(): Promise<AgentSummary[]> {
   const res = await fetch(buildUrl(`/agentstore/agents/descriptors?limit=100`));
