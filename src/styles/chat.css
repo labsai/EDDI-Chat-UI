@@ -1402,3 +1402,63 @@ a:hover { opacity: 0.85; }
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ─── Agent picker (no agent named in the URL) ─── */
+
+.agent-picker {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 24px;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.agent-picker__title {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--chat-text);
+}
+
+.agent-picker__hint {
+  margin: 0 0 20px;
+  font-size: 0.9rem;
+  color: var(--chat-text-muted);
+}
+
+.agent-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-picker__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--chat-border);
+  border-radius: var(--chat-radius-sm);
+  background: var(--chat-surface);
+  color: var(--chat-text);
+  text-decoration: none;
+}
+
+.agent-picker__item:hover,
+.agent-picker__item:focus-visible {
+  border-color: var(--chat-accent);
+  background: var(--chat-accent-soft);
+}
+
+.agent-picker__name {
+  font-weight: 600;
+}
+
+.agent-picker__description {
+  font-size: 0.85rem;
+  color: var(--chat-text-muted);
+}

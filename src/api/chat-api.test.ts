@@ -10,6 +10,8 @@ import {
   loadManagedConversation,
   sendManagedAgentMessage,
   setBaseUrl,
+  fetchAgentDescriptor,
+  fetchAgents,
 } from "./chat-api";
 import { mockFetchSSE, mockFetchResponse, captureFetch } from "@/test-utils/sse";
 import type { SSEEvent } from "@/types";
@@ -191,5 +193,73 @@ describe("managed-agent conversation", () => {
 
     const body = JSON.parse(String(calls[0].init?.body));
     expect(body.context.attachment_0.value.storageRef).toBe("r1");
+  });
+});
+
+/* ─── Agent descriptor / discovery ─────────────── */
+
+describe("fetchAgentDescriptor", () => {
+  it("reads the name from the descriptor store, with an explicit version", async () => {
+    const seen: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const href = String(url);
+      seen.push(href);
+      if (href.includes("/currentversion")) return new Response("3", { status: 200 });
+      return Response.json({ name: "Support Bot", description: "Helps out" });
+    }) as typeof fetch;
+
+    const desc = await fetchAgentDescriptor("agent-1");
+
+    expect(desc).toEqual({ name: "Support Bot", description: "Helps out" });
+    // Both stores answer 400 without a version, and the agent config carries no
+    // name at all — so the descriptor store, versioned, is the only source that works.
+    expect(seen.some((u) => u.includes("/agentstore/agents/agent-1/currentversion"))).toBe(true);
+    expect(
+      seen.some((u) => u.includes("/descriptorstore/descriptors/agent-1?version=3")),
+    ).toBe(true);
+  });
+
+  it("returns nothing when the version cannot be resolved", async () => {
+    globalThis.fetch = (async () =>
+      new Response("nope", { status: 404 })) as typeof fetch;
+
+    expect(await fetchAgentDescriptor("agent-1")).toEqual({});
+  });
+
+  it("treats blank names as absent so the header stays clean", async () => {
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      if (String(url).includes("/currentversion")) return new Response("1", { status: 200 });
+      return Response.json({ name: "", description: "" });
+    }) as typeof fetch;
+
+    expect(await fetchAgentDescriptor("agent-1")).toEqual({
+      name: undefined,
+      description: undefined,
+    });
+  });
+});
+
+describe("fetchAgents", () => {
+  it("parses agent ids out of descriptor resource URIs", async () => {
+    globalThis.fetch = (async () =>
+      Response.json([
+        {
+          resource: "eddi://ai.labs.agent/agentstore/agents/abc-123?version=1",
+          name: "Support Bot",
+          description: "Helps out",
+        },
+        { resource: "not-a-resource-uri", name: "Broken" },
+      ])) as typeof fetch;
+
+    expect(await fetchAgents()).toEqual([
+      { agentId: "abc-123", name: "Support Bot", description: "Helps out" },
+    ]);
+  });
+
+  it("throws when the store cannot be reached", async () => {
+    globalThis.fetch = (async () =>
+      new Response("boom", { status: 500 })) as typeof fetch;
+
+    await expect(fetchAgents()).rejects.toThrow();
   });
 });

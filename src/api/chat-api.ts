@@ -332,24 +332,73 @@ export async function redoConversation(
   );
 }
 
+/* ─── Agent discovery ──────────────────────────── */
+
+export interface AgentSummary {
+  agentId: string;
+  name: string;
+  description?: string;
+}
+
+/**
+ * List the agents this EDDI instance knows about, for the no-agent-selected landing.
+ * Descriptors carry the display name; the id is parsed out of the resource URI.
+ */
+export async function fetchAgents(): Promise<AgentSummary[]> {
+  const res = await fetch(buildUrl(`/agentstore/agents/descriptors?limit=100`));
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.text(), "Failed to load agents");
+  }
+
+  const data = await res.json();
+  if (!Array.isArray(data)) return [];
+
+  return data
+    .map((d): AgentSummary | null => {
+      const match = /\/agentstore\/agents\/([^/?]+)/.exec(d?.resource ?? "");
+      if (!match) return null;
+      return {
+        agentId: match[1],
+        name: d?.name || "Unnamed agent",
+        description: d?.description || undefined,
+      };
+    })
+    .filter((a): a is AgentSummary => a !== null);
+}
+
 /* ─── Agent descriptor ─────────────────────────── */
 
 /**
  * Fetch the agent document descriptor to get the agent's display name.
- * Uses the GET /agentstore/agents/:agentId endpoint.
+ *
+ * The name and description live on the *descriptor*, not on the agent config —
+ * GET /agentstore/agents/:agentId returns workflows/channels and carries no name at all.
+ * Both stores also require an explicit `version`; without it they answer 400, so the
+ * current version is resolved first. Every failure degrades to "no name available",
+ * which the header already handles.
  */
 export async function fetchAgentDescriptor(
   agentId: string,
 ): Promise<{ name?: string; description?: string }> {
-  const res = await fetch(
-    buildUrl(`/agentstore/agents/${encodeSegment(agentId)}`),
-  );
-  if (!res.ok) return {};
   try {
+    const versionRes = await fetch(
+      buildUrl(`/agentstore/agents/${encodeSegment(agentId)}/currentversion`),
+    );
+    if (!versionRes.ok) return {};
+    const version = Number((await versionRes.text()).trim());
+    if (!Number.isFinite(version)) return {};
+
+    const res = await fetch(
+      buildUrl(
+        `/descriptorstore/descriptors/${encodeSegment(agentId)}?version=${version}`,
+      ),
+    );
+    if (!res.ok) return {};
+
     const data = await res.json();
     return {
-      name: data?.resource?.name ?? data?.name,
-      description: data?.resource?.description ?? data?.description,
+      name: data?.name || undefined,
+      description: data?.description || undefined,
     };
   } catch {
     return {};
