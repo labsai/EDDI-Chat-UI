@@ -65,11 +65,15 @@ git format-patch master --output-directory ../chat-patches
 
 # In a clone of labsai/EDDI, on a new branch from main
 git switch -c my-branch origin/main
-git am --directory=ui/chat ../chat-patches/*.patch
+git am --directory=ui/chat --exclude='ui/chat/dist/*' ../chat-patches/*.patch
 ```
 
-`--directory=ui/chat` is what places the changes under the new path. If a patch no longer applies
-because the code has moved on, `git am --3way` usually resolves it.
+`--directory=ui/chat` places every path in a patch under `ui/chat/`. Everything in this repository
+moved there except the committed build output in `dist/`: `labsai/EDDI` builds the Chat UI with
+Maven and commits no build output, so a patch that touched `dist/` would stop `git am` without the
+`--exclude`. The pattern names the path *after* `--directory` has prefixed it, which is why it starts
+with `ui/chat/`. If a patch no longer applies because the code has moved on, `git am --3way` usually
+resolves it.
 
 ## License
 
