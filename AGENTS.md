@@ -1,6 +1,15 @@
 # EDDI Chat UI — AI Agent Guidelines
 
-> **This file is loaded by AI coding assistants. Follow ALL rules below.**
+> [!CAUTION]
+> **This repository is archived. Do not make changes here.** The EDDI Chat UI moved to
+> [`labsai/EDDI` → `ui/chat`](https://github.com/labsai/EDDI/tree/main/ui/chat) in September 2026, with its full history. Work in a clone of
+> `labsai/EDDI` and follow
+> [`ui/chat/AGENTS.md`](https://github.com/labsai/EDDI/blob/main/ui/chat/AGENTS.md) and the
+> repository's root [`AGENTS.md`](https://github.com/labsai/EDDI/blob/main/AGENTS.md). The guidelines
+> below are kept only as a historical record and are no longer maintained.
+
+> **Historical record only. Do not follow the rules below** — they describe this archived repository,
+> not `labsai/EDDI`, and following them would mean working in the wrong place.
 
 ## 1. Project Context
 
